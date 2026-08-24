@@ -14,10 +14,18 @@ typedef enum {
 } OpCode;
 
 typedef struct {
+    int line;
+    int count;
+} LineStart;
+
+typedef struct {
     int count;
     int capacity;
     uint8_t *code;
-    int *lines;
+
+    int lineCount;
+    int lineCapacity;
+    LineStart *lines;
     ValueArray constants;
 } Chunk;
 
@@ -28,5 +36,7 @@ void freeChunk(Chunk *chunk);
 void writeChunk(Chunk *chunk, uint8_t byte, int line);
 
 int addConstant(Chunk *chunk, Value value);
+
+int getLine(Chunk *chunk, int index);
 
 #endif //CLOX_CHUNK_H
