@@ -5,8 +5,6 @@
 #ifndef CLOX_MEMORY_H
 #define CLOX_MEMORY_H
 
-#include "common.h"
-
 #define GROW_CAPACITY(capacity) \
     ((capacity) < 8 ? 8 : (capacity) * 2 )
 
