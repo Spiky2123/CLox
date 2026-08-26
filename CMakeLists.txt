@@ -14,4 +14,8 @@ add_executable(CLox src/main.c
         src/value.h
         src/value.c
         src/vm.h
-        src/vm.c)
+        src/vm.c
+        src/compiler.h
+        src/compiler.c
+        src/scanner.h
+        src/scanner.c)
