@@ -2,13 +2,10 @@
 // Created by scuta on 8/26/2026.
 //
 
-#include <stdio.h>
 #include <string.h>
 
 #include "common.h"
 #include "scanner.h"
-
-#include <ctype.h>
 
 typedef struct {
     const char *start;
