@@ -1,5 +1,6 @@
 # Ignore CLion IDE files
 .idea/
+test.lox
 
 # Ignore CMake build directories
 cmake-build-*/
