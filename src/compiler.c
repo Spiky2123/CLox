@@ -304,7 +304,16 @@ static void parsePrecedence(Precedence precedence) {
 }
 
 static uint8_t identifierConstant(Token* name) {
-    return makeConstant(OBJ_VAL(copyString(name->start, name->length)));
+    ObjString* string = copyString(name->start, name->length);
+
+    for (int i = 0; i < currentChunk()->constants.count; i++) {
+        Value constant = currentChunk()->constants.values[i];
+        if (IS_STRING(constant) && AS_STRING(constant) == string) {
+            return (uint8_t)i;
+        }
+    }
+
+    return makeConstant(OBJ_VAL(string));
 }
 
 static uint8_t parseVariable(const char* errorMessage) {
