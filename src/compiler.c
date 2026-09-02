@@ -8,6 +8,9 @@
 
 #include "common.h"
 #include "compiler.h"
+
+#include <stdatomic.h>
+
 #include "scanner.h"
 
 #ifdef DEBUG_PRINT_CODE
@@ -46,6 +49,7 @@ typedef struct {
 typedef struct {
     Token name;
     int depth;
+    bool isFinal;
 } Local;
 
 typedef struct {
@@ -53,6 +57,14 @@ typedef struct {
     int localCount;
     int scopeDepth;
 } Compiler;
+
+typedef struct {
+    Token name;
+    bool isFinal;
+} Global;
+
+Global globals[UINT8_COUNT];
+int globalCount;
 
 Parser parser;
 Compiler *current = NULL;
@@ -241,9 +253,25 @@ static void string(bool canAssign) {
     emitConstant(OBJ_VAL(copyString(parser.previous.start +1, parser.previous.length - 2)));
 }
 
+static bool identifiersEqual(Token *a, Token *b) {
+    if (a->length != b->length) return false;
+    return memcmp(a->start, b->start, a->length) == 0;
+}
+
+static bool findGlobalIsFinal(Token *name) {
+    for (int i = globalCount - 1; i>= 0 ;i--) {
+        if (identifiersEqual(name, &globals[i].name)) {
+            return globals[i].isFinal;
+        }
+    }
+    return false;
+}
+
 static void namedVariable(Token name, bool canAssign) {
     uint8_t getOp, setOp;
     int arg = resolveLocal(current, &name);
+    bool isLocal = (arg != -1);
+
     if (arg != -1) {
         getOp = OP_GET_LOCAL;
         setOp = OP_SET_LOCAL;
@@ -254,6 +282,12 @@ static void namedVariable(Token name, bool canAssign) {
     }
 
     if (canAssign && match(TOKEN_EQUAL)) {
+        bool isFinal = isLocal? current->locals[arg].isFinal : findGlobalIsFinal(&name);
+
+        if (isFinal) {
+            error("Can't reassign variable of type final.");
+        }
+
         expression();
         emitBytes(setOp, (uint8_t) arg);
     } else {
@@ -306,6 +340,7 @@ ParseRule rules[] = {
     [TOKEN_CLASS] = {NULL, NULL, PREC_NONE},
     [TOKEN_ELSE] = {NULL, NULL, PREC_NONE},
     [TOKEN_FALSE] = {literal, NULL, PREC_NONE},
+    [TOKEN_FINAL] = {NULL, NULL, PREC_NONE},
     [TOKEN_FOR] = {NULL, NULL, PREC_NONE},
     [TOKEN_FUN] = {NULL, NULL, PREC_NONE},
     [TOKEN_IF] = {NULL, NULL, PREC_NONE},
@@ -348,11 +383,6 @@ static uint8_t identifierConstant(Token *name) {
     return makeConstant(OBJ_VAL(copyString(name->start, name->length)));
 }
 
-static bool identifiersEqual(Token *a, Token *b) {
-    if (a->length != b->length) return false;
-    return memcmp(a->start, b->start, a->length) == 0;
-}
-
 static int resolveLocal(Compiler *compiler, Token *name) {
     for (int i = compiler->localCount - 1; i >= 0; i--) {
         Local *local = &compiler->locals[i];
@@ -366,18 +396,19 @@ static int resolveLocal(Compiler *compiler, Token *name) {
     return -1;
 }
 
-static void addLocal(Token name) {
+static void addLocal(Token name, bool isFinal) {
     if (current->localCount == UINT8_COUNT) {
-        error("TOo many local variables in function.");
+        error("Too many local variables in function.");
         return;
     }
 
     Local *local = &current->locals[current->localCount++];
     local->name = name;
+    local->isFinal = isFinal;
     local->depth = -1;
 }
 
-static void declareVariable() {
+static void declareVariable(bool isFinal) {
     if (current->scopeDepth == 0) return;
 
     Token *name = &parser.previous;
@@ -392,13 +423,13 @@ static void declareVariable() {
         }
     }
 
-    addLocal(*name);
+    addLocal(*name, isFinal);
 }
 
-static uint8_t parseVariable(const char *errorMessage) {
+static uint8_t parseVariable(const char *errorMessage, bool isFinal) {
     consume(TOKEN_IDENTIFIER, errorMessage);
 
-    declareVariable();
+    declareVariable(isFinal);
     if (current->scopeDepth > 0) return 0;
 
     return identifierConstant(&parser.previous);
@@ -408,12 +439,23 @@ static void markInitialized() {
     current->locals[current->localCount - 1].depth = current->scopeDepth;
 }
 
-static void defineVariable(uint8_t global) {
+static void addGlobal(Token name, bool isFinal) {
+    if (globalCount == UINT8_COUNT) {
+        error("Too many global variables.");
+        return;
+    }
+    globals[globalCount].name = name;
+    globals[globalCount].isFinal = isFinal;
+    globalCount++;
+}
+
+static void defineVariable(uint8_t global, bool isFinal) {
     if (current->scopeDepth > 0) {
         markInitialized();
         return;
     }
 
+    addGlobal(parser.previous, isFinal);
     emitBytes(OP_DEFINE_GLOBAL, global);
 }
 
@@ -433,8 +475,9 @@ static void block() {
     consume(TOKEN_RIGHT_BRACE, "Expect '}' after block.");
 }
 
-static void varDeclaration() {
-    uint8_t global = parseVariable("Expect variable name.");
+
+static void varDeclaration(bool isFinal) {
+    uint8_t global = parseVariable("Expect variable name.", isFinal);
 
     if (match(TOKEN_EQUAL)) {
         expression();
@@ -444,7 +487,7 @@ static void varDeclaration() {
 
     consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
 
-    defineVariable(global);
+    defineVariable(global, isFinal);
 }
 
 static void expressionStatement() {
@@ -468,6 +511,7 @@ static void synchronize() {
             case TOKEN_CLASS:
             case TOKEN_FUN:
             case TOKEN_VAR:
+            case TOKEN_FINAL:
             case TOKEN_FOR:
             case TOKEN_IF:
             case TOKEN_WHILE:
@@ -488,7 +532,9 @@ static void synchronize() {
 
 static void declaration() {
     if (match(TOKEN_VAR)) {
-        varDeclaration();
+        varDeclaration(false);
+    } else if (match(TOKEN_FINAL)) {
+        varDeclaration(true);
     } else {
         statement();
     }
@@ -513,6 +559,8 @@ bool compile(const char *source, Chunk *chunk) {
     Compiler compiler;
     initCompiler(&compiler);
     compilingChunk = chunk;
+
+    globalCount = 0;
 
     parser.hadError = false;
     parser.panicMode = false;
