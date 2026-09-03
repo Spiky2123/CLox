@@ -3,6 +3,12 @@ project(CLox C)
 
 set(CMAKE_C_STANDARD 11)
 
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
+set(CMAKE_C_FLAGS_RELEASE "-O2")
+
 add_executable(CLox src/main.c
         src/common.h
         src/chunk.h
