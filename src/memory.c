@@ -21,10 +21,10 @@ void *reallocate(void *pointer, size_t oldSize, size_t newSize) {
 #ifdef DEBUG_STRESS_GC
         collectGarbage();
 #endif
-    }
 
-    if (vm.bytesAllocated > vm.nextGC) {
-        collectGarbage();
+        if (vm.bytesAllocated > vm.nextGC) {
+            collectGarbage();
+        }
     }
 
     if (newSize == 0) {
@@ -228,6 +228,9 @@ void collectGarbage() {
     sweep();
 
     vm.nextGC = vm.bytesAllocated * GC_HEAP_GROW_FACTOR;
+    if (vm.nextGC < (1024 * 1024)) {
+        vm.nextGC = (1024 * 1024);
+    }
 
 #ifdef DEBUG_LOG_GC
     printf("-- gc end\n");
