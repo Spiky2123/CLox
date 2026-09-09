@@ -23,13 +23,15 @@ clox implements Lox front-to-back as a compile-and-run pipeline:
 
 Alongside the core implementation, I worked through a number of the book's end-of-chapter challenges, each on its own branch forked from the relevant chapter's commit:
 
-- **Long constants**: an `OP_CONSTANT_LONG` instruction with a 24-bit operand, so a chunk isn't capped at 256 constants
 - **Run-length line encoding**: chunks store line-number info more compactly instead of one `int` per bytecode instruction
+- **Long constants**: an `OP_CONSTANT_LONG` instruction with a 24-bit operand, so a chunk isn't capped at 256 constants
 - **Single-allocation strings**: `ObjString` uses a flexible array member so the character data lives inline with the struct instead of needing a second heap allocation
 - **Deduplicated identifier constants**: the compiler reuses an existing constant-table entry for a global's name instead of emitting a duplicate constant every time that name is referenced
+- **`final` variables**: immutability enforced at compile time, rejecting reassignment to a variable declared `final`
 - **`switch` statement**
 - **`continue` statement** for loops
-- **`final` variables**: immutability enforced at compile time, rejecting reassignment to a variable declared `final`
+- **Field deletion**: a `deleteField` native function that removes a field from an instance at runtime
+- **Field existence checking**: a `hasField` native function that checks whether an instance has a given field, instead of erroring (or returning `nil`) on a missing property
 
 ## Design and architecture
 
