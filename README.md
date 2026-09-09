@@ -21,7 +21,7 @@ clox implements Lox front-to-back as a compile-and-run pipeline:
 
 ## Beyond the book
 
-Alongside the core implementation, I worked through a number of the book's end-of-chapter challenges, each on its own branch forked from the relevant chapter's commit rather than merged into the main line:
+Alongside the core implementation, I worked through a number of the book's end-of-chapter challenges, each on its own branch forked from the relevant chapter's commit:
 
 - **Long constants**: an `OP_CONSTANT_LONG` instruction with a 24-bit operand, so a chunk isn't capped at 256 constants
 - **Run-length line encoding**: chunks store line-number info more compactly instead of one `int` per bytecode instruction
