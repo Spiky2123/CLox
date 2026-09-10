@@ -4,13 +4,13 @@
 ![Build](https://img.shields.io/badge/build-CMake-orange?style=flat-square)
 ![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen?style=flat-square)
 
-clox is the second Lox implementation from working through Robert Nystrom's *Crafting Interpreters*, following [jlox](https://github.com/Spiky2123/JLox), the tree-walking interpreter I built in Java. Where jlox parses source into an AST and walks it to evaluate a program, clox compiles Lox source directly into bytecode and executes that bytecode on a stack-based virtual machine, written from scratch in C with no external dependencies or generated tooling.
+clox is the second Lox implementation from working through Robert Nystrom's *Crafting Interpreters*, following [jlox](https://github.com/Spiky2123/JLox), the tree-walking interpreter I built in Java. While jlox parses source into an AST and walks it to evaluate a program, clox compiles Lox source directly into bytecode and executes that bytecode on a stack-based virtual machine, written from scratch in C with no external dependencies or generated tooling.
 
-jlox proved I understood how a language executes. clox was about understanding *why* that execution was slow, and fixing it: same language, same semantics, but compiled and run the way production interpreters (CPython, Lua, MRI) actually work.
+jlox proved I understood how a language executes. clox was about understanding *why* that execution was slow, and fixing it: the same language and semantics, but compiled to bytecode and executed using the techniques found in production interpreters such as CPython, Lua, and MRI.
 
 ## Highlights
 
-- **7x faster than jlox on average, up to 12.19x on closures**: same language, same semantics, compiled to bytecode and executed on a stack machine instead of walking a tree
+- **7x faster than jlox on average, up to 12.19x on closures**: same language, same semantics, compiled to bytecode and executed on a stack machine instead of interpreting an AST directly
 - **Single-pass compilation**: a hand-written Pratt parser emits bytecode directly during parsing, with no intermediate AST
 - **Manual memory management**: a mark-and-sweep garbage collector, an intrusive object list, and a from-scratch hash table for string interning and globals
 - **Closures without a tree**: upvalues that start open (pointing into the stack) and close (copied onto the heap) once their scope exits
@@ -29,7 +29,7 @@ jlox proved I understood how a language executes. clox was about understanding *
 
 *Median of 5 runs per benchmark, measured with `clock()` on a Ryzen AI 9 365 / 32GB RAM. clox built in CMake's Release configuration (`-O2`).*
 
-The gap comes down to what each interpreter does per operation: jlox re-walks and type-checks AST nodes on every evaluation and allocates a fresh `Environment` object per call frame, while clox compiles each expression to bytecode once and then dispatches flat instructions off a stack. The closure benchmark shows the widest gap because clox's open/closed upvalues capture variables without a heap allocation on every closure creation, unlike jlox's chained environments.
+The gap comes down to the work each interpreter performs for each operation: jlox re-walks and type-checks AST nodes on every evaluation and allocates a fresh `Environment` object for each call frame, while clox compiles each expression to bytecode once and then dispatches flat instructions off a stack. The closure benchmark shows the widest gap because clox's open/closed upvalues capture variables without a heap allocation on every closure creation, unlike jlox's chained environments.
 
 ## What it does
 
@@ -58,7 +58,7 @@ Alongside the core implementation, I worked through a number of the book's end-o
 - **`switch` statement**
 - **`continue` statement** for loops
 - **Field deletion**: a `deleteField` native function that removes a field from an instance at runtime
-- **Field existence checking**: a `hasField` native function that checks whether an instance has a given field, instead of erroring (or returning `nil`) on a missing property
+- **Field existence checking**: a `hasField` native function that checks whether an instance has a given field, instead of raising an error (or returning `nil`) on a missing property
 
 ## Example
 
@@ -104,7 +104,7 @@ Requires a C compiler (GCC or Clang) and CMake. No other dependencies.
 
 ## Design & architecture
 
-The pipeline is deliberately flatter than jlox's. A `Scanner` still turns source text into tokens, but there's no separate AST or resolver pass. The `Compiler` is a single-pass Pratt parser that parses and emits bytecode into a `Chunk` (a dynamic array of instructions, a constant pool, and line info) in the same walk. The `VM` then executes a `Chunk` directly off a value stack, dispatching each opcode in a loop rather than recursing over tree nodes.
+The pipeline is deliberately flatter than jlox's. A `Scanner` still turns source text into tokens, but there's no separate AST or resolver pass. The `Compiler` is a single-pass Pratt parser that parses and emits bytecode into a `Chunk` (a dynamic array of instructions, a constant pool, and line info) in the same walk. The `VM` then executes a `Chunk` directly using a value stack, dispatching each opcode in a loop rather than recursing over tree nodes.
 
 **Values & objects.** `Value` is a tagged union representing Lox's dynamic typing without runtime type descriptors beyond a tag byte. Heap-allocated data (strings, functions, closures, classes, instances) are `Obj`s linked into a single intrusive list so the garbage collector can walk every live allocation.
 
@@ -112,7 +112,7 @@ The pipeline is deliberately flatter than jlox's. A `Scanner` still turns source
 
 **Hash table.** `Table` is open-addressed with linear probing and backs two things: string interning, so equal strings are the same pointer and comparisons are O(1), and the globals table, so variable lookup by name doesn't require re-scanning anything.
 
-**Closures.** Closures capture variables through upvalues instead of jlox's chained `Environment` objects. Each `ObjClosure` holds an array of upvalues that start open (pointing at a stack slot) and get closed (copied to the heap) when the variable's scope exits, what lets a closure keep working after its enclosing function has returned.
+**Closures.** Closures capture variables through upvalues instead of jlox's chained `Environment` objects. Each `ObjClosure` holds an array of upvalues that start open (pointing at a stack slot) and become closed (copied to the heap) when the variable's scope exits, allowing the closure to keep working after its enclosing function has returned.
 
 **Classes.** Classes and instances are built on the same object model, with methods stored in per-class hash tables and `super` calls resolved through an explicit superclass reference rather than walking a class hierarchy at call time.
 
@@ -132,11 +132,11 @@ The pipeline is deliberately flatter than jlox's. A `Scanner` still turns source
 
 **Memory management**
 - Manual memory management in C: `malloc`/`realloc`/`free` lifecycles for growable arrays and hash tables
-- Garbage collection: mark-and-sweep from an explicit root set, and when a collector needs to run to keep memory bounded
-- Allocation strategy: trade-offs like inlining string data into its struct to cut allocations in half
+- Garbage collection: mark-and-sweep from an explicit root set, including understanding when the collector needs to run to keep memory usage bounded
+- Allocation strategy: trade-offs such as inlining string data into its struct to cut allocations in half
 
 **Language implementation deep-dives**
-- Closures without a tree: upvalues, the open/closed distinction, and why a VM needs a different closure mechanism than a tree-walker
+- Closures without a tree: upvalues that start open (pointing into the stack) and become closed (copied onto the heap) once their scope exits
 - Hash tables from scratch: open addressing with linear probing, and string interning as an equality-check optimization
 - Classes on a VM: method tables, bound methods, and resolving `super` without walking a class hierarchy per call
 
